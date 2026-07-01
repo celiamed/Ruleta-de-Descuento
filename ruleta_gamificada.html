@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ruleta de Descuentos Flash</title>
+    <!-- Tailwind CSS para diseño responsivo y moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome para íconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti para la celebración -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow-x: hidden;
+            background: linear-gradient(135deg, #1e0b36 0%, #31074e 50%, #4a0d66 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* Indicador de la ruleta (Flecha) */
+        .roulette-pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 30px solid #FFD700; /* Dorado */
+            z-index: 10;
+            filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.5));
+        }
+
+        .story-frame {
+            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+            padding: 4px;
+            border-radius: 20px;
+        }
+
+        .story-content {
+            background: #111;
+            border-radius: 16px;
+        }
+
+        /* Animación de pulso para el botón de girar */
+        @keyframes pulse-glow {
+            0% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 215, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0); }
+        }
+        
+        .btn-spin.active {
+            animation: pulse-glow 2s infinite;
+            background: linear-gradient(to right, #f59e0b, #ef4444);
+            cursor: pointer;
+            opacity: 1;
+        }
+        
+        .btn-spin.disabled {
+            background: #4b5563;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* Ocultar scrollbar pero permitir scroll */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-start p-4 sm:p-8">
+
+    <!-- Encabezado -->
+    <header class="text-center w-full max-w-md mt-4 mb-6">
+        <h1 class="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-pink-500 mb-2">
+            Ruleta Flash ⚡
+        </h1>
+        <p class="text-sm text-gray-300">Sube una foto de tu outfit con nuestra ropa y gana descuentos exclusivos.</p>
+    </header>
+
+    <!-- Contenedor Principal -->
+    <main class="w-full max-w-md flex flex-col gap-6 relative z-10">
+        
+        <!-- Paso 1: Interacción -->
+        <div id="interaction-step" class="glass-panel p-5 rounded-2xl text-center shadow-2xl transition-all duration-300">
+            <h2 class="font-semibold text-lg mb-3"><i class="fa-solid fa-camera mr-2"></i>Paso 1: Desbloquea la Ruleta</h2>
+            
+            <input type="file" id="photo-upload" class="hidden" accept="image/*">
+            <label for="photo-upload" id="upload-label" class="inline-block w-full py-3 px-4 bg-white text-purple-900 font-bold rounded-xl cursor-pointer hover:bg-gray-100 transition-colors shadow-lg">
+                <i class="fa-solid fa-upload mr-2"></i> Subir Foto de mi Outfit
+            </label>
+            <p id="upload-success" class="text-green-400 text-sm font-semibold mt-3 hidden">
+                <i class="fa-solid fa-check-circle mr-1"></i> ¡Foto lista! Ya puedes girar.
+            </p>
+        </div>
+
+        <!-- Paso 2: La Ruleta -->
+        <div class="glass-panel p-6 rounded-3xl flex flex-col items-center relative shadow-2xl">
+            <!-- Capa de bloqueo -->
+            <div id="roulette-overlay" class="absolute inset-0 bg-black bg-opacity-60 backdrop-blur-sm z-20 rounded-3xl flex items-center justify-center flex-col transition-opacity duration-500">
+                <i class="fa-solid fa-lock text-4xl text-gray-400 mb-2"></i>
+                <span class="text-sm font-semibold">Sube tu foto primero</span>
+            </div>
+
+            <!-- Contenedor del Canvas -->
+            <div class="relative w-[280px] h-[280px] mx-auto">
+                <div class="roulette-pointer"></div>
+                <canvas id="rouletteCanvas" width="280" height="280" class="rounded-full shadow-[0_0_20px_rgba(255,215,0,0.3)]"></canvas>
+            </div>
+
+            <!-- Botón Girar -->
+            <button id="spinBtn" class="btn-spin disabled mt-8 w-full py-4 rounded-full text-xl font-extrabold text-white shadow-xl transition-all uppercase tracking-wider" disabled>
+                Girar Ruleta
+            </button>
+        </div>
+    </main>
+
+    <!-- Modal de Resultado (Oculto inicialmente) -->
+    <div id="resultModal" class="fixed inset-0 bg-black bg-opacity-90 z-50 hidden flex-col items-center justify-center p-4">
+        
+        <!-- Tarjeta "Story" para captura de pantalla -->
+        <div class="story-frame w-full max-w-sm mb-6 animate-bounce">
+            <div class="story-content p-6 text-center">
+                <div class="mb-4">
+                    <i class="fa-solid fa-gift text-5xl text-yellow-400 drop-shadow-lg"></i>
+                </div>
+                <h3 class="text-2xl font-bold mb-1">¡Aprovecharé mi premio!</h3>
+                <p class="text-lg font-light text-gray-300 mb-4">en <span class="font-bold text-pink-500">@TuMarca</span></p>
+                
+                <div class="bg-gray-800 p-4 rounded-xl border border-dashed border-gray-500 mb-4">
+                    <p class="text-sm text-gray-400 mb-1">Has ganado:</p>
+                    <p id="prizeText" class="text-3xl font-extrabold text-yellow-400 uppercase tracking-tighter"></p>
+                </div>
+
+                <p class="text-xs text-gray-400 mt-2"><i class="fa-solid fa-camera mr-1"></i> Toma screenshot, súbelo a tus stories y etiquétanos.</p>
+            </div>
+        </div>
+
+        <!-- Mensaje de sistema interactivo -->
+        <div class="w-full max-w-sm bg-white text-gray-900 p-5 rounded-2xl text-center shadow-2xl relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-400 to-blue-500"></div>
+            <h4 class="font-bold text-lg mb-2">¡Código y Link Copiados! <i class="fa-solid fa-clipboard-check text-green-500"></i></h4>
+            <p class="text-sm text-gray-600 mb-4">Hemos copiado tu código junto con el enlace directo a nuestra tienda en tu portapapeles.</p>
+            <button onclick="closeModal()" class="w-full bg-gray-900 text-white py-3 rounded-lg font-semibold hover:bg-gray-800 transition">
+                Ir a la tienda
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-2xl transition-opacity duration-300 opacity-0 pointer-events-none z-50">
+        <span id="toastMsg"></span>
+    </div>
+
+    <script>
+        // Configuración de la marca
+        const BRAND_NAME = "@TuMarca";
+        const STORE_URL = "https://tumarca.com/shop";
+
+        // Configuración de Premios
+        const prizes = [
+            { text: "Envío Gratis", code: "FREESHIP24", color: "#FF2D55" }, // Rosa
+            { text: "15% OFF", code: "FLASH15", color: "#5856D6" }, // Morado
+            { text: "2x1 Playeras", code: "BOGO2X1", color: "#FF9500" }, // Naranja
+            { text: "10% OFF", code: "FLASH10", color: "#4CD964" }, // Verde
+            { text: "Calcetas Gratis", code: "CALCETAS", color: "#007AFF" }, // Azul
+            { text: "20% OFF", code: "MEGA20", color: "#FFCC00" }  // Amarillo
+        ];
+
+        // Variables del Canvas y Ruleta
+        const canvas = document.getElementById("rouletteCanvas");
+        const ctx = canvas.getContext("2d");
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = centerX - 10; // Padding
+        
+        let currentAngle = 0; // Ángulo actual en radianes
+        let isSpinning = false;
+
+        // Dibujar la ruleta
+        function drawWheel() {
+            const numSlices = prizes.length;
+            const sliceAngle = (2 * Math.PI) / numSlices;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Borde exterior dorado
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius + 5, 0, 2 * Math.PI);
+            ctx.fillStyle = "#FFD700";
+            ctx.fill();
+
+            for (let i = 0; i < numSlices; i++) {
+                const startAngle = currentAngle + i * sliceAngle;
+                const endAngle = startAngle + sliceAngle;
+
+                // Dibujar rebanada
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                ctx.closePath();
+                ctx.fillStyle = prizes[i].color;
+                ctx.fill();
+                
+                // Borde interno de la rebanada
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#ffffff";
+                ctx.stroke();
+
+                // Dibujar texto
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(startAngle + sliceAngle / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 16px Poppins, sans-serif";
+                ctx.shadowColor = "rgba(0,0,0,0.5)";
+                ctx.shadowBlur = 4;
+                ctx.fillText(prizes[i].text, radius - 20, 5);
+                ctx.restore();
+            }
+            
+            // Centro de la ruleta (Eje)
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 25, 0, 2 * Math.PI);
+            ctx.fillStyle = "#1e0b36";
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = "#FFD700";
+            ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 10, 0, 2 * Math.PI);
+            ctx.fillStyle = "#FFD700";
+            ctx.fill();
+        }
+
+        // Lógica de Giro
+        function spin() {
+            if (isSpinning) return;
+            isSpinning = true;
+            
+            // Reproducir un pequeño efecto visual en el botón
+            const btn = document.getElementById("spinBtn");
+            btn.classList.remove('active');
+            btn.classList.add('disabled');
+            btn.innerText = "Girando...";
+
+            // Lógica de ángulos
+            const spinTimeTotal = Math.random() * 2000 + 3000; // 3 a 5 segundos
+            let spinTimeCurrent = 0;
+            const spinVelocity = Math.random() * 0.2 + 0.3; // Velocidad inicial aleatoria
+            const targetAngle = currentAngle + (Math.random() * Math.PI * 2) + (Math.PI * 2 * 5); // 5 vueltas extra
+
+            function animate(timestamp) {
+                if (!spinTimeCurrent) spinTimeCurrent = timestamp;
+                const progress = timestamp - spinTimeCurrent;
+                
+                if (progress < spinTimeTotal) {
+                    // Función Easing (ease-out)
+                    const easeOut = 1 - Math.pow(1 - (progress / spinTimeTotal), 3);
+                    currentAngle = targetAngle * easeOut;
+                    drawWheel();
+                    requestAnimationFrame(animate);
+                } else {
+                    // Terminó el giro
+                    isSpinning = false;
+                    btn.innerText = "¡Premio Obtenido!";
+                    determinePrize();
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        // Determinar qué premio ganó basado en el ángulo final
+        function determinePrize() {
+            // Normalizar el ángulo (quitar las vueltas completas)
+            const normalizedAngle = currentAngle % (2 * Math.PI);
+            
+            // La flecha está en el TOP (270 grados o 1.5 PI radianes visualmente)
+            // Calculamos el offset de la flecha respecto al canvas original (que dibuja el 0 a la derecha)
+            const sliceAngle = (2 * Math.PI) / prizes.length;
+            
+            // Ángulo en la parte superior (pointer)
+            const pointerAngle = (3 * Math.PI) / 2; // 270 grados
+            
+            // Encontrar qué rebanada está bajo el pointer
+            let relativeAngle = (pointerAngle - normalizedAngle + (2 * Math.PI)) % (2 * Math.PI);
+            
+            // Invertimos porque dibujamos en sentido horario y la rueda "gira"
+            let winningIndex = Math.floor(relativeAngle / sliceAngle);
+            
+            // Si el cálculo da la longitud exacta por redondeo, vuelve a 0
+            if(winningIndex === prizes.length) winningIndex = 0;
+
+            const prize = prizes[winningIndex];
+            showResult(prize);
+        }
+
+        // Lógica del Portapapeles (Compatible con iFrame / navegadores restrictivos)
+        function copyToClipboard(text) {
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            textarea.style.position = "fixed";  // Evitar scroll
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            
+            try {
+                document.execCommand("copy");
+                showToast("¡Copiado al portapapeles!");
+            } catch (err) {
+                console.error("Error al copiar", err);
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        }
+
+        // Mostrar Resultado y Lanzar Confeti
+        function showResult(prize) {
+            // 1. Mostrar Modal
+            document.getElementById("prizeText").innerText = prize.text;
+            const modal = document.getElementById("resultModal");
+            modal.classList.remove("hidden");
+            modal.classList.add("flex");
+
+            // 2. Confeti
+            var duration = 3 * 1000;
+            var animationEnd = Date.now() + duration;
+            var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100 };
+
+            function randomInRange(min, max) {
+                return Math.random() * (max - min) + min;
+            }
+
+            var interval = setInterval(function() {
+                var timeLeft = animationEnd - Date.now();
+
+                if (timeLeft <= 0) {
+                    return clearInterval(interval);
+                }
+
+                var particleCount = 50 * (timeLeft / duration);
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+            }, 250);
+
+            // 3. Copiar al portapapeles
+            const promoMessage = `¡Gané ${prize.text} en ${BRAND_NAME}!\nUsa mi código: ${prize.code}\nCompra aquí: ${STORE_URL}`;
+            copyToClipboard(promoMessage);
+        }
+
+        // Funciones de UI Auxiliares
+        function closeModal() {
+            // Reiniciar para jugar de nuevo o simplemente redirigir
+            window.location.href = STORE_URL; // Simulamos ir a la tienda
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById("toast");
+            document.getElementById("toastMsg").innerText = msg;
+            toast.style.opacity = "1";
+            setTimeout(() => { toast.style.opacity = "0"; }, 3000);
+        }
+
+        // Event Listeners
+        document.getElementById("photo-upload").addEventListener("change", function(e) {
+            if(e.target.files.length > 0) {
+                // UI changes
+                document.getElementById("upload-label").classList.add("hidden");
+                document.getElementById("upload-success").classList.remove("hidden");
+                document.getElementById("roulette-overlay").style.opacity = "0";
+                setTimeout(() => {
+                    document.getElementById("roulette-overlay").classList.add("hidden");
+                }, 500);
+
+                // Enable Spin
+                const btn = document.getElementById("spinBtn");
+                btn.disabled = false;
+                btn.classList.remove("disabled");
+                btn.classList.add("active");
+                
+                showToast("¡Foto cargada correctamente!");
+            }
+        });
+
+        document.getElementById("spinBtn").addEventListener("click", spin);
+
+        // Inicializar
+        drawWheel();
+    </script>
+</body>
+</html>
